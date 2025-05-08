@@ -111,7 +111,4 @@ curl -X POST https://yourapiurl/api/pdf/generate \
 
 This project provides a simple and efficient solution to convert structured data and images into well-formatted PDFs using a clean .NET 8 Web API.
 
-```
 
-Let me know if you’d like this converted into a downloadable file or adjusted for deployment environments (e.g., Docker or Azure).
-```
