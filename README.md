@@ -1,6 +1,4 @@
-Here's a complete `README.md` file for your project:
 
-````markdown
 # 📄 PDF Generation API (.NET 8)
 
 This API generates a polished multi-page PDF from a CSV file, an image, and some metadata. The image appears on the first page, while the CSV content is rendered as a clean, styled table across the following pages.
