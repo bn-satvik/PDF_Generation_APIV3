@@ -5,6 +5,7 @@ using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using System.Globalization;
+using System.Diagnostics; 
 
 namespace Proj.Controllers
 {
@@ -19,40 +20,41 @@ namespace Proj.Controllers
             _logger = logger;
         }
 
-        // API endpoint: POST /api/pdf/generate
         [HttpPost("generate")]
         public async Task<IActionResult> GeneratePdf()
         {
             try
             {
-                // Read form data from request
-                var form = await Request.ReadFormAsync();
+                Console.WriteLine("************************************************************");
+                var overallStopwatch = Stopwatch.StartNew();
 
-                // Get image file, CSV file, and metadata from form
+                var form = await Request.ReadFormAsync();
                 var image = form.Files["image"];
                 var csvFile = form.Files["tableData"];
-                var metadataRaw = form["metadata"]; // JSON string: [Title, Inspector, Date Range]
+                var metadataRaw = form["metadata"];
 
-                // Check if any required input is missing
                 if (image == null || csvFile == null || string.IsNullOrWhiteSpace(metadataRaw))
                 {
                     return BadRequest("Missing image, CSV file, or metadata.");
                 }
 
-                // Parse CSV into table data (list of rows) using CsvHelper
-                List<List<string>> tableData = new List<List<string>>();
+                // Time CSV parsing
+                var csvStopwatch = Stopwatch.StartNew();
+                List<List<string>> tableData;
                 using (var csvStream = csvFile.OpenReadStream())
                 {
-                    tableData = ParseCsvWithCsvHelper(csvStream); // Use CsvHelper
+                    tableData = ParseCsvWithCsvHelper(csvStream);
                 }
+                csvStopwatch.Stop();
+                Console.WriteLine($"CSV parsing took {csvStopwatch.ElapsedMilliseconds} ms");
 
-                // Ensure at least header + one data row
                 if (tableData.Count < 2)
                 {
                     return BadRequest("CSV must contain a header row and at least one data row.");
                 }
 
-                // Parse metadata JSON into list of strings safely
+                // Time metadata parsing
+                var metadataStopwatch = Stopwatch.StartNew();
                 List<string> metadata;
                 try
                 {
@@ -67,12 +69,11 @@ namespace Proj.Controllers
                 {
                     return BadRequest($"Invalid JSON format for metadata: {ex.Message}");
                 }
+                metadataStopwatch.Stop();
+                Console.WriteLine($"Metadata parsing took {metadataStopwatch.ElapsedMilliseconds} ms");
 
-
-                // Get image stream for PDF
                 using var imageStream = image.OpenReadStream();
 
-                // Prepare PDF header data
                 var headerModel = new PdfHeaderModel
                 {
                     LogoPath = "Utils/barracuda_logo.png",
@@ -83,35 +84,38 @@ namespace Proj.Controllers
                     DateRange = metadata.Count > 2 ? metadata[2] : "N/A"
                 };
 
-                // Set footer options
                 var footerModel = new PdfFooterModel
                 {
                     ShowPageNumbers = true
                 };
 
-                // Generate the PDF using helper class
+                // Time PDF generation
+                var pdfStopwatch = Stopwatch.StartNew();
                 byte[] pdfBytes = PdfGenerator.Generate(imageStream, tableData, headerModel, footerModel);
+                pdfStopwatch.Stop();
+                Console.WriteLine($"PDF generation took {pdfStopwatch.ElapsedMilliseconds} ms");
 
-                // Create filename using metadata title and date
+                // Time filename generation
+                var fileNameStopwatch = Stopwatch.StartNew();
                 string fileName = $"{headerModel.Title}_{headerModel.GeneratedDate}.pdf";
+                fileNameStopwatch.Stop();
+                Console.WriteLine($"Filename creation took {fileNameStopwatch.ElapsedMilliseconds} ms");
 
-                // Return PDF file as HTTP response
+                overallStopwatch.Stop();
+                Console.WriteLine($"Total request processing time: {overallStopwatch.ElapsedMilliseconds} ms");
+
                 return File(pdfBytes, "application/pdf", fileName);
             }
             catch (Exception ex)
             {
-                // Log unexpected errors
-                _logger.LogError(ex, "Error generating PDF");
+                Console.WriteLine("Error generating PDF");
                 return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
-        // Parses CSV with CsvHelper and returns a list of rows
         private List<List<string>> ParseCsvWithCsvHelper(Stream csvStream)
         {
             var records = new List<List<string>>();
-
-            // Set up the CsvReader to handle CSV data
             using (var reader = new StreamReader(csvStream, Encoding.UTF8))
             using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
             {
@@ -119,21 +123,16 @@ namespace Proj.Controllers
                 Delimiter = ","
             }))
             {
-                // Read records and store each row as a list of strings
                 while (csv.Read())
                 {
                     var row = new List<string>();
-
-                    // Iterate through each column in the row
                     for (int i = 0; csv.TryGetField(i, out string? value); i++)
                     {
-                        row.Add(value ?? string.Empty); // Safe null fallback
+                        row.Add(value ?? string.Empty);
                     }
-
                     records.Add(row);
                 }
             }
-
             return records;
         }
     }
