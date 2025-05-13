@@ -5,7 +5,7 @@ using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using System.Globalization;
-using System.Diagnostics; 
+using System.Diagnostics;
 
 namespace Proj.Controllers
 {
@@ -28,17 +28,19 @@ namespace Proj.Controllers
                 Console.WriteLine("************************************************************");
                 var overallStopwatch = Stopwatch.StartNew();
 
+                // Read uploaded form data
                 var form = await Request.ReadFormAsync();
                 var image = form.Files["image"];
                 var csvFile = form.Files["tableData"];
                 var metadataRaw = form["metadata"];
 
+                // Validate inputs
                 if (image == null || csvFile == null || string.IsNullOrWhiteSpace(metadataRaw))
                 {
                     return BadRequest("Missing image, CSV file, or metadata.");
                 }
 
-                // Time CSV parsing
+                // Parse CSV data
                 var csvStopwatch = Stopwatch.StartNew();
                 List<List<string>> tableData;
                 using (var csvStream = csvFile.OpenReadStream())
@@ -53,17 +55,16 @@ namespace Proj.Controllers
                     return BadRequest("CSV must contain a header row and at least one data row.");
                 }
 
-                // Time metadata parsing
+                // Parse metadata (Dictionary<string, string>)
                 var metadataStopwatch = Stopwatch.StartNew();
-                List<string> metadata;
+                Dictionary<string, string> metadata;
                 try
                 {
-                    var deserialized = JsonSerializer.Deserialize<List<string>>(metadataRaw.ToString());
-                    if (deserialized is null)
+                    metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(metadataRaw.ToString()!)!;
+                    if (metadata is null)
                     {
                         return BadRequest("Failed to parse metadata.");
                     }
-                    metadata = deserialized;
                 }
                 catch (JsonException ex)
                 {
@@ -74,36 +75,40 @@ namespace Proj.Controllers
 
                 using var imageStream = image.OpenReadStream();
 
+                // Prepare header data for PDF
                 var headerModel = new PdfHeaderModel
                 {
                     LogoPath = "Utils/barracuda_logo.png",
-                    Title = metadata.Count > 0 ? metadata[0] : "N/A",
+                    Title = metadata.TryGetValue("Title", out var title) ? title : "N/A",
                     GeneratedDate = DateTime.Now.ToString("MMM dd, yyyy"),
                     CompanyName = "Barracuda Networks",
-                    InspectorName = metadata.Count > 1 ? metadata[1] : "N/A",
-                    DateRange = metadata.Count > 2 ? metadata[2] : "N/A"
+                    ProuductName = metadata.TryGetValue("ProductName", out var productName) ? productName : "N/A",
+                    DateRange = metadata.TryGetValue("DateRange", out var dateRange) ? dateRange : "N/A"
                 };
 
+                // Footer settings
                 var footerModel = new PdfFooterModel
                 {
                     ShowPageNumbers = true
                 };
 
-                // Time PDF generation
+                // Generate PDF
                 var pdfStopwatch = Stopwatch.StartNew();
                 byte[] pdfBytes = PdfGenerator.Generate(imageStream, tableData, headerModel, footerModel);
                 pdfStopwatch.Stop();
                 Console.WriteLine($"PDF generation took {pdfStopwatch.ElapsedMilliseconds} ms");
 
-                // Time filename generation
+                // Create filename
                 var fileNameStopwatch = Stopwatch.StartNew();
                 string fileName = $"{headerModel.Title}_{headerModel.GeneratedDate}.pdf";
                 fileNameStopwatch.Stop();
                 Console.WriteLine($"Filename creation took {fileNameStopwatch.ElapsedMilliseconds} ms");
 
+                // Log total time
                 overallStopwatch.Stop();
                 Console.WriteLine($"Total request processing time: {overallStopwatch.ElapsedMilliseconds} ms");
 
+                // Return PDF file
                 return File(pdfBytes, "application/pdf", fileName);
             }
             catch (Exception ex)
@@ -113,6 +118,7 @@ namespace Proj.Controllers
             }
         }
 
+        // Helper method to parse CSV
         private List<List<string>> ParseCsvWithCsvHelper(Stream csvStream)
         {
             var records = new List<List<string>>();
