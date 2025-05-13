@@ -1,11 +1,17 @@
 using MigraDoc.DocumentObjectModel;
 
-
 namespace Proj.Utils
 {
     public static class PdfFooterLayout
     {
-        // Builds the footer content for the PDF
+        // ===== Constants =====
+        private const int FooterFontSize = 12;
+        private const ParagraphAlignment FooterAlignment = ParagraphAlignment.Right;
+        private const string PageTextPrefix = "Page ";
+        private const string PageTextSeparator = " | ";
+        private const string PageTextConnector = " of ";
+
+        // Builds the footer content for the PDF 
         public static void BuildFooter(PdfFooterModel footerModel, Section section)
         {
             // Get the footer section
@@ -13,30 +19,27 @@ namespace Proj.Utils
 
             // Create a new paragraph in the footer
             Paragraph paragraph = footer.AddParagraph();
-            paragraph.Format.Font.Size = 12;
-            paragraph.Format.Alignment = ParagraphAlignment.Right;
+            paragraph.Format.Font.Size = FooterFontSize;
+            paragraph.Format.Alignment = FooterAlignment;
 
-            
             // Add page number info if enabled
             if (footerModel.ShowPageNumbers)
             {
                 if (!string.IsNullOrEmpty(footerModel.RightText))
                 {
                     paragraph.AddText(footerModel.RightText);
-                    paragraph.AddText(" | ");
+                    paragraph.AddText(PageTextSeparator);
                 }
 
-                paragraph.AddText("Page ");
+                paragraph.AddText(PageTextPrefix);
                 paragraph.AddPageField();        // Adds current page number
-                paragraph.AddText(" of ");
+                paragraph.AddText(PageTextConnector);
                 paragraph.AddNumPagesField();    // Adds total page count
             }
 
             // Re-add right text if combined with other info
             if (!string.IsNullOrEmpty(footerModel.RightText))
             {
-                
-
                 paragraph.AddText(footerModel.RightText);
             }
         }
